@@ -1,0 +1,139 @@
+
+
+- name: Disable Firewall Deamon (firewalld)
+  shell: 'firewall-cmd --zone=public --add-port=6379/tcp --permanent'
+
+- name: Create groups
+  group: name=css state=present
+
+- name: Create user
+  user: name=css groups=css password=css123
+
+
+- name:
+  shell: |
+    mount -o loop /dev/sr0 /mnt 
+  ignore_errors: true
+
+
+
+- name: server preparation
+  copy:
+    src: "{{ item }}"
+    dest: /etc/yum.repos.d/
+    mode: 0777
+  with_fileglob:
+    - /server/playbooks/redis/roles/redis/template/AppStream.repo
+    - /server/playbooks/redis/roles/redis/template/base.repo
+    - /server/playbooks/redis/roles/redis/template/modsecurity-8.repo
+    - /server/playbooks/redis/roles/redis/template/nginx-plus-8.repo
+    - /server/playbooks/redis/roles/redis/template/redhat.repo  
+  loop: "{{ query('fileglob', '/server/playbooks/redis/roles/redis/template/%s.repo' % inventory_hostname) }}"
+  
+#- name: Install python2
+#  shell: |
+#    yum install -y python2 
+    
+    
+#- name: Install make
+#  ansible.builtin.yum:
+#    name: make
+#    state: present
+#    
+
+- name: Install make
+  shell: |
+    yum install -y make     
+      
+- name: copy redis files
+  copy:
+    src: "{{ item }}"
+    dest: /server
+    owner: css
+    group: css
+    mode: 0777
+  with_fileglob:
+    - /server/playbooks/redis/roles/redis/template/env.sh
+    - /server/playbooks/redis/roles/redis/template/redis.conf
+#    
+#- name: Task name
+#  debug:
+#      msg: "/server/redis-stable/"
+#  when: register_name.stat.exists and register_name.stat.isdir    
+# 
+   
+#- name: mkdir
+#  command: 'mkdir  /server/redis-stable/'
+#  when: "not register_name.stat.exists"
+#
+  
+- name: Unarchive a file that is already on the remote machine
+  ansible.builtin.unarchive:
+    src:  /server/redis-stable.tar.gz
+    dest:  /server/
+    mode: 0777
+    remote_src: yes
+
+- name: Add a line to a file ~/.bash_profile
+  lineinfile:
+    path: ~/.bash_profile
+    line: source /server/env.sh
+    
+
+
+- name: create directory if they don't exist
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: css
+    group: css
+    mode: 0777
+  loop:
+    - /server/redis-stable/bin
+    - /server/redis-stable/configure
+    - /server/redis-stable/dump
+
+
+
+#- name: redis preparation
+#  copy:
+#    src: "{{ item }}"
+#    dest: /server/redis-stable/bin/
+#    mode: 0777
+#  with_fileglob:
+#    - /server/redis.conf
+#    - /server/redis-stable/src/redis-cli 
+#    - /server/redis-stable/src/redis-server
+#    - /server/redis-stable/src/redis-sentinel
+#    - /server/redis-stable/src/redis-benchmark
+#  loop: "{{ query('fileglob', '/server/redis-stable/src/redis-%s' % inventory_hostname) }}"
+
+    
+    
+- name: shell commands to prepare redis install 1    
+  shell: |
+     cp /server/redis-stable/src/redis-*  /server/redis-stable/bin/
+  become: true
+  become_user: css
+
+- name: shell commands to prepare redis install  2   
+  shell: |
+     cp /server/redis.conf /server/redis-stable
+     cp /server/redis.conf /server/redis-stable/configure/ 
+  become: true
+  become_user: css
+
+
+- name: shell commands to prepare redis install  3   
+  shell: |
+    cd /server/redis-stable/ && make
+  become: true
+  become_user: css
+  
+- name: shell commands to prepare redis install   4  
+  shell: |
+    nohup /server/redis-stable/src/redis-server /server/redis-stable/configure/redis.conf > /server/redis-stable/redis.log &
+  become: true
+  become_user: css  
+
+
